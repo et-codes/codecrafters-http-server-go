@@ -20,11 +20,16 @@ func (s *Server) Listen() error {
 		logger.Error("Failed to bind to port %s", port)
 		return err
 	}
+	logger.Info("Listening on port %s", port)
 
-	_, err = l.Accept()
+	conn, err := l.Accept()
 	if err != nil {
 		logger.Error("Error accepting connection: ", err.Error())
 		return err
 	}
+
+	handler := NewHandler(conn)
+	handler.Start()
+
 	return nil
 }

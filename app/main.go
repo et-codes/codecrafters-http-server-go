@@ -16,6 +16,4 @@ func main() {
 	if err := s.Listen(); err != nil {
 		logger.Fatal("Error starting server: %v", err)
 	}
-
-	logger.Info("Listening on port %s", port)
 }
