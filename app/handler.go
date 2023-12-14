@@ -8,7 +8,6 @@ import (
 
 const (
 	CRLF           = "\r\n"
-	delim          = "\r\n\r\n"
 	respOK         = "HTTP/1.1 200 OK\r\n\r\n"
 	respNotFound   = "HTTP/1.1 404 Not Found\r\n\r\n"
 	statusOK       = "HTTP/1.1 200 OK"
@@ -50,15 +49,17 @@ func (h *Handler) Start() {
 	switch {
 	case path == "/":
 		response = []byte(respOK)
-		_, err = h.conn.Write(response)
 	case path[:6] == "/echo/":
 		message := path[6:]
 		response = newResponse(statusOK, textPlain, message)
-		_, err = h.conn.Write(response)
+	case path == "/user-agent":
+		message := parseUserAgent(lines)
+		response = newResponse(statusOK, textPlain, message)
 	default:
 		response = []byte(respNotFound)
-		_, err = h.conn.Write(response)
 	}
+
+	_, err = h.conn.Write(response)
 	if err != nil {
 		logger.Error("Error writing reply: %v", err)
 		return
@@ -83,4 +84,13 @@ func newResponse(status, contentType, body string) []byte {
 		"Content-Length", len(body),
 		body,
 	))
+}
+
+func parseUserAgent(lines []string) string {
+	for _, line := range lines {
+		if strings.HasPrefix(line, "User-Agent: ") {
+			return strings.TrimPrefix(line, "User-Agent: ")
+		}
+	}
+	return ""
 }
