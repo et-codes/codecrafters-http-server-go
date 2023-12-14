@@ -27,13 +27,14 @@ func (h *Handler) Start() {
 	logger.Info("Handler invoked.")
 	defer h.conn.Close()
 
-	// Get
+	// Wait for client request.
 	request, err := h.getRequest()
 	if err != nil {
 		logger.Error("Error reading response: %v", err)
 		return
 	}
 
+	// Get start line method and path.
 	lines := strings.Split(request, CRLF)
 	startLine := lines[0]
 	logger.Info(startLine)
@@ -41,10 +42,12 @@ func (h *Handler) Start() {
 	words := strings.Split(startLine, " ")
 	method, path := words[0], words[1]
 
+	// Make sure we can handle the request type.
 	if method != "GET" {
 		logger.Warning("Unsupported method %s", method)
 	}
 
+	// Generate the response according to the path.
 	var response []byte
 	switch {
 	case path == "/":
@@ -59,6 +62,7 @@ func (h *Handler) Start() {
 		response = []byte(respNotFound)
 	}
 
+	// Send the response.
 	_, err = h.conn.Write(response)
 	if err != nil {
 		logger.Error("Error writing reply: %v", err)
