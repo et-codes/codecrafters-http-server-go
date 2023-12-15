@@ -3,10 +3,10 @@ package main
 import (
 	"os"
 
-	"github.com/codecrafters-io/http-server-starter-go/logging"
+	"github.com/et-codes/logging"
 )
 
-var logger = logging.New(logging.LevelDebug)
+var logger = logging.New(logging.LevelInfo)
 
 func main() {
 	var dir string
