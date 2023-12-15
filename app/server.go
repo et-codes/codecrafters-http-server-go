@@ -16,12 +16,12 @@ func NewServer(host, port, dir string) *Server {
 }
 
 func (s *Server) Listen() error {
-	l, err := net.Listen("tcp", fmt.Sprintf("%s:%s", host, port))
+	l, err := net.Listen("tcp", fmt.Sprintf("%s:%s", s.host, s.port))
 	if err != nil {
-		logger.Error("Failed to bind to port %s", port)
+		logger.Error("Failed to bind to port %s", s.port)
 		return err
 	}
-	logger.Info("Listening on port %s...", port)
+	logger.Info("Listening on port %s...", s.port)
 
 	for {
 		conn, err := l.Accept()

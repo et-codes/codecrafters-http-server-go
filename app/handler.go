@@ -31,11 +31,10 @@ type Handler struct {
 }
 
 type Request struct {
-	StartLine string
-	Method    string
-	Path      string
-	Header    []string
-	Body      []byte
+	Method string
+	Path   string
+	Header []string
+	Body   []byte
 }
 
 func NewHandler(conn net.Conn, dir string) *Handler {
@@ -92,6 +91,7 @@ func (h *Handler) Start() {
 	logger.Debug("reply sent.\n%s", response)
 }
 
+// getRequest receives the client HTTP request.
 func (h *Handler) getRequest() (*Request, error) {
 	request := make([]byte, 16*1024) // 16kB
 	n, err := h.conn.Read(request)
@@ -119,11 +119,10 @@ func (h *Handler) getRequest() (*Request, error) {
 	}
 
 	return &Request{
-		StartLine: startLine,
-		Method:    method,
-		Path:      path,
-		Header:    header,
-		Body:      body,
+		Method: method,
+		Path:   path,
+		Header: header,
+		Body:   body,
 	}, nil
 }
 
