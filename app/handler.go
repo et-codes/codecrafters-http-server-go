@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"net"
+	"os"
 	"strings"
 )
 
 const (
+	appOctStream   = "application/octet-stream"
 	CRLF           = "\r\n"
 	respOK         = "HTTP/1.1 200 OK\r\n\r\n"
 	respNotFound   = "HTTP/1.1 404 Not Found\r\n\r\n"
@@ -17,10 +20,11 @@ const (
 
 type Handler struct {
 	conn net.Conn
+	fs   fs.FS
 }
 
-func NewHandler(conn net.Conn) *Handler {
-	return &Handler{conn: conn}
+func NewHandler(conn net.Conn, fs fs.FS) *Handler {
+	return &Handler{conn: conn, fs: fs}
 }
 
 func (h *Handler) Start() {
@@ -58,6 +62,12 @@ func (h *Handler) Start() {
 	case path == "/user-agent":
 		message := parseUserAgent(lines)
 		response = newResponse(statusOK, textPlain, message)
+	case path[:7] == "/files/":
+		filename := path[7:]
+		response, err = h.downloadFile(filename)
+		if err != nil {
+			logger.Error(err.Error())
+		}
 	default:
 		response = []byte(respNotFound)
 	}
@@ -80,11 +90,34 @@ func (h *Handler) getRequest() (string, error) {
 	return string(response), nil
 }
 
+func (h *Handler) downloadFile(filename string) ([]byte, error) {
+	if _, err := os.Stat(filename); err != nil {
+		return newResponse(statusNotFound, textPlain, ""), fmt.Errorf("could not find file: %v", err)
+	}
+
+	b, err := fs.ReadFile(h.fs, filename)
+	if err != nil {
+		return nil, fmt.Errorf("error opening file: %v", err)
+	}
+
+	return newFileResponse(b), nil
+}
+
 func newResponse(status, contentType, body string) []byte {
 	return []byte(fmt.Sprintf(
 		"%s\r\n%s: %s\r\n%s: %d\r\n\r\n%s",
 		status,
 		"Content-Type", contentType,
+		"Content-Length", len(body),
+		body,
+	))
+}
+
+func newFileResponse(body []byte) []byte {
+	return []byte(fmt.Sprintf(
+		"%s\r\n%s: %s\r\n%s: %d\r\n\r\n%s",
+		statusOK,
+		"Content-Type", appOctStream,
 		"Content-Length", len(body),
 		body,
 	))

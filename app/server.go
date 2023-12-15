@@ -9,10 +9,10 @@ import (
 type Server struct {
 	host string
 	port string
-	fs   *fs.FS // Filesystem
+	fs   fs.FS // Filesystem
 }
 
-func NewServer(host, port string, fs *fs.FS) *Server {
+func NewServer(host, port string, fs fs.FS) *Server {
 	return &Server{host, port, fs}
 }
 
@@ -31,7 +31,7 @@ func (s *Server) Listen() error {
 			return err
 		}
 
-		handler := NewHandler(conn)
+		handler := NewHandler(conn, s.fs)
 		go handler.Start()
 	}
 }

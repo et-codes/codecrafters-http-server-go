@@ -22,7 +22,7 @@ func main() {
 		logger.Info("Serving directory %s...", fs)
 	}
 
-	s := NewServer(host, port, &fs)
+	s := NewServer(host, port, fs)
 	if err := s.Listen(); err != nil {
 		logger.Fatal("Error starting server: %v", err)
 	}
