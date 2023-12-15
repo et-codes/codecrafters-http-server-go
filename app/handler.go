@@ -8,13 +8,15 @@ import (
 )
 
 const (
-	appOctStream   = "application/octet-stream"
-	CRLF           = "\r\n"
-	respOK         = "HTTP/1.1 200 OK\r\n\r\n"
-	respNotFound   = "HTTP/1.1 404 Not Found\r\n\r\n"
-	statusOK       = "HTTP/1.1 200 OK"
-	statusNotFound = "HTTP/1.1 404 Not Found"
-	textPlain      = "text/plain"
+	appOctStream      = "application/octet-stream"
+	CRLF              = "\r\n"
+	respOK            = "HTTP/1.1 200 OK\r\n\r\n"
+	respNotFound      = "HTTP/1.1 404 Not Found\r\n\r\n"
+	respServerError   = "HTTP/1.1 500 Internal Server Error\r\n\r\n"
+	statusOK          = "HTTP/1.1 200 OK"
+	statusNotFound    = "HTTP/1.1 404 Not Found"
+	statusServerError = "HTTP/1.1 500 Internal Server Error"
+	textPlain         = "text/plain"
 )
 
 type Handler struct {
@@ -46,26 +48,33 @@ func (h *Handler) Start() {
 	method, path := words[0], words[1]
 
 	// Make sure we can handle the request type.
-	if method != "GET" {
+	if method != "GET" && method != "POST" {
 		logger.Warning("Unsupported method %s", method)
 	}
 
 	// Generate the response according to the path.
 	var response []byte
 	switch {
-	case path == "/":
+	case path == "/" && method == "GET":
 		response = []byte(respOK)
-	case path[:6] == "/echo/":
+	case path[:6] == "/echo/" && method == "GET":
 		message := path[6:]
-		response = newResponse(statusOK, textPlain, message)
-	case path == "/user-agent":
+		response = newTextResponse(statusOK, message)
+	case path == "/user-agent" && method == "GET":
 		message := parseUserAgent(lines)
-		response = newResponse(statusOK, textPlain, message)
+		response = newTextResponse(statusOK, message)
 	case path[:7] == "/files/":
 		filename := path[7:]
-		response, err = h.downloadResponse(filename)
-		if err != nil {
-			logger.Error(err.Error())
+		if method == "GET" {
+			response, err = h.downloadResponse(filename)
+			if err != nil {
+				logger.Error(err.Error())
+			}
+		} else if method == "POST" {
+			response, err = h.uploadResponse(filename)
+			if err != nil {
+				logger.Error(err.Error())
+			}
 		}
 	default:
 		response = []byte(respNotFound)
@@ -90,9 +99,9 @@ func (h *Handler) getRequest() (string, error) {
 }
 
 func (h *Handler) downloadResponse(filename string) ([]byte, error) {
-	logger.Debug("Opening file %v%s", h.fs, filename)
+	logger.Info("User downloading %s...", filename)
 	if _, err := fs.Stat(h.fs, filename); err != nil {
-		return newResponse(statusNotFound, textPlain, ""), fmt.Errorf("could not find file: %v", err)
+		return newTextResponse(statusNotFound, ""), fmt.Errorf("could not find file: %v", err)
 	}
 
 	b, err := fs.ReadFile(h.fs, filename)
@@ -109,11 +118,19 @@ func (h *Handler) downloadResponse(filename string) ([]byte, error) {
 	)), nil
 }
 
-func newResponse(status, contentType, body string) []byte {
+func (h *Handler) uploadResponse(filename string) ([]byte, error) {
+	logger.Info("User uploading file %s...", filename)
+
+	// GET THE UPLOAD HERE...
+
+	return nil, nil
+}
+
+func newTextResponse(status, body string) []byte {
 	return []byte(fmt.Sprintf(
 		"%s\r\n%s: %s\r\n%s: %d\r\n\r\n%s",
 		status,
-		"Content-Type", contentType,
+		"Content-Type", textPlain,
 		"Content-Length", len(body),
 		body,
 	))
