@@ -26,64 +26,55 @@ const (
 )
 
 type Handler struct {
-	conn net.Conn
-	dir  string
+	conn      net.Conn
+	directory string
+}
+
+type Request struct {
+	StartLine string
+	Method    string
+	Path      string
+	Header    []string
+	Body      []byte
 }
 
 func NewHandler(conn net.Conn, dir string) *Handler {
-	return &Handler{conn: conn, dir: dir}
+	return &Handler{conn: conn, directory: dir}
 }
 
 func (h *Handler) Start() {
 	logger.Info("Handler invoked.")
 	defer h.conn.Close()
 
-	// Wait for client request.
-	request, err := h.getRequest()
+	// Wait for client req.
+	req, err := h.getRequest()
 	if err != nil {
 		logger.Error("Error reading response: %v", err)
 		return
 	}
 
-	// Get start line method and path.
-	lines := strings.Split(request, CRLF)
-	startLine := lines[0]
-	logger.Info(startLine)
-
-	words := strings.Split(startLine, " ")
-	method, path := words[0], words[1]
-
-	// Get message body.
-	var body []byte
-	for i, line := range lines {
-		if line == "" {
-			body = []byte(lines[i+1])
-			break
-		}
-	}
-
 	// Generate the response according to the path.
 	var response []byte
 	switch {
-	case method != "GET" && method != "POST":
+	case req.Method != "GET" && req.Method != "POST":
 		response = []byte(respMethod)
-	case path == "/" && method == "GET":
+	case req.Path == "/" && req.Method == "GET":
 		response = []byte(respOK)
-	case path[:6] == "/echo/" && method == "GET":
-		message := path[6:]
+	case req.Path[:6] == "/echo/" && req.Method == "GET":
+		message := req.Path[6:]
 		response = newTextResponse(statusOK, message)
-	case path == "/user-agent" && method == "GET":
-		message := parseUserAgent(lines)
+	case req.Path == "/user-agent" && req.Method == "GET":
+		message := parseUserAgent(req.Header)
 		response = newTextResponse(statusOK, message)
-	case path[:7] == "/files/":
-		filename := path[7:]
-		if method == "GET" {
+	case req.Path[:7] == "/files/":
+		filename := req.Path[7:]
+		if req.Method == "GET" {
 			response, err = h.downloadResponse(filename)
 			if err != nil {
 				logger.Error(err.Error())
 			}
-		} else if method == "POST" {
-			response, err = h.uploadResponse(filename, body)
+		} else if req.Method == "POST" {
+			response, err = h.uploadResponse(filename, req.Body)
 			if err != nil {
 				logger.Error(err.Error())
 			}
@@ -101,24 +92,50 @@ func (h *Handler) Start() {
 	logger.Debug("reply sent.\n%s", response)
 }
 
-func (h *Handler) getRequest() (string, error) {
-	response := make([]byte, 1024)
-	n, err := h.conn.Read(response)
+func (h *Handler) getRequest() (*Request, error) {
+	request := make([]byte, 16*1024) // 16kB
+	n, err := h.conn.Read(request)
 	if err != nil {
-		return "", fmt.Errorf("error reading response: %v", err)
+		return nil, fmt.Errorf("error reading response: %v", err)
 	}
-	return string(response[:n]), nil
+
+	// Get start line method and path.
+	lines := strings.Split(string(request[:n]), CRLF)
+	startLine := lines[0]
+	logger.Info(startLine)
+
+	words := strings.Split(startLine, " ")
+	method, path := words[0], words[1]
+
+	// Get message body.
+	var body []byte
+	var header []string
+	for i, line := range lines {
+		if line == "" {
+			body = []byte(lines[i+1])
+			break
+		}
+		header = append(header, line)
+	}
+
+	return &Request{
+		StartLine: startLine,
+		Method:    method,
+		Path:      path,
+		Header:    header,
+		Body:      body,
+	}, nil
 }
 
 // downloadResponse returns a 200 OK response message with a header and the
 // contents of the specified file in the body, or 404 if the file is not found.
 func (h *Handler) downloadResponse(filename string) ([]byte, error) {
-	if h.dir == "" {
+	if h.directory == "" {
 		return []byte(respNotFound), fmt.Errorf("directory not specified")
 	}
 
 	// Open directory.
-	fileSystem := os.DirFS(h.dir)
+	fileSystem := os.DirFS(h.directory)
 	if _, err := fs.Stat(fileSystem, filename); err != nil {
 		return []byte(respNotFound), fmt.Errorf("could not find file: %v", err)
 	}
@@ -143,7 +160,7 @@ func (h *Handler) downloadResponse(filename string) ([]byte, error) {
 // a 201 Created response if successful, 500 if not.
 func (h *Handler) uploadResponse(filename string, data []byte) ([]byte, error) {
 	// Create the file.
-	path := filepath.Join(h.dir, filename)
+	path := filepath.Join(h.directory, filename)
 	file, err := os.Create(path)
 	if err != nil {
 		return []byte(respServerError),

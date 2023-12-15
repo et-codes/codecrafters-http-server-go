@@ -6,9 +6,9 @@ import (
 )
 
 type Server struct {
-	host string
-	port string
-	dir  string // directory
+	host      string
+	port      string
+	directory string
 }
 
 func NewServer(host, port, dir string) *Server {
@@ -30,7 +30,7 @@ func (s *Server) Listen() error {
 			return err
 		}
 
-		handler := NewHandler(conn, s.dir)
+		handler := NewHandler(conn, s.directory)
 		go handler.Start()
 	}
 }
