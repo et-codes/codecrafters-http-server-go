@@ -2,16 +2,18 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"net"
 )
 
 type Server struct {
 	host string
 	port string
+	fs   *fs.FS // Filesystem
 }
 
-func NewServer(host, port string) *Server {
-	return &Server{host, port}
+func NewServer(host, port string, fs *fs.FS) *Server {
+	return &Server{host, port, fs}
 }
 
 func (s *Server) Listen() error {
@@ -20,7 +22,7 @@ func (s *Server) Listen() error {
 		logger.Error("Failed to bind to port %s", port)
 		return err
 	}
-	logger.Info("Listening on port %s", port)
+	logger.Info("Listening on port %s...", port)
 
 	for {
 		conn, err := l.Accept()
