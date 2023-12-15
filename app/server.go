@@ -2,18 +2,17 @@ package main
 
 import (
 	"fmt"
-	"io/fs"
 	"net"
 )
 
 type Server struct {
 	host string
 	port string
-	fs   fs.FS // Filesystem
+	dir  string // directory
 }
 
-func NewServer(host, port string, fs fs.FS) *Server {
-	return &Server{host, port, fs}
+func NewServer(host, port, dir string) *Server {
+	return &Server{host, port, dir}
 }
 
 func (s *Server) Listen() error {
@@ -31,7 +30,7 @@ func (s *Server) Listen() error {
 			return err
 		}
 
-		handler := NewHandler(conn, s.fs)
+		handler := NewHandler(conn, s.dir)
 		go handler.Start()
 	}
 }

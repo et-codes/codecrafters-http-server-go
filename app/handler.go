@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -12,8 +14,8 @@ const (
 	CRLF              = "\r\n"
 	respOK            = "HTTP/1.1 200 OK\r\n\r\n"
 	respNotFound      = "HTTP/1.1 404 Not Found\r\n\r\n"
-	respServerError   = "HTTP/1.1 500 Internal Server Error\r\n\r\n"
 	statusOK          = "HTTP/1.1 200 OK"
+	statusCreated     = "HTTP/1.1 201 Created"
 	statusNotFound    = "HTTP/1.1 404 Not Found"
 	statusServerError = "HTTP/1.1 500 Internal Server Error"
 	textPlain         = "text/plain"
@@ -21,11 +23,11 @@ const (
 
 type Handler struct {
 	conn net.Conn
-	fs   fs.FS
+	dir  string
 }
 
-func NewHandler(conn net.Conn, fs fs.FS) *Handler {
-	return &Handler{conn: conn, fs: fs}
+func NewHandler(conn net.Conn, dir string) *Handler {
+	return &Handler{conn: conn, dir: dir}
 }
 
 func (h *Handler) Start() {
@@ -46,6 +48,15 @@ func (h *Handler) Start() {
 
 	words := strings.Split(startLine, " ")
 	method, path := words[0], words[1]
+
+	// Get message body.
+	var body []byte
+	for i, line := range lines {
+		if line == "" {
+			body = []byte(lines[i+1])
+			break
+		}
+	}
 
 	// Make sure we can handle the request type.
 	if method != "GET" && method != "POST" {
@@ -71,7 +82,7 @@ func (h *Handler) Start() {
 				logger.Error(err.Error())
 			}
 		} else if method == "POST" {
-			response, err = h.uploadResponse(filename)
+			response, err = h.uploadResponse(filename, body)
 			if err != nil {
 				logger.Error(err.Error())
 			}
@@ -91,20 +102,25 @@ func (h *Handler) Start() {
 
 func (h *Handler) getRequest() (string, error) {
 	response := make([]byte, 1024)
-	_, err := h.conn.Read(response)
+	n, err := h.conn.Read(response)
 	if err != nil {
 		return "", fmt.Errorf("error reading response: %v", err)
 	}
-	return string(response), nil
+	return string(response[:n]), nil
 }
 
 func (h *Handler) downloadResponse(filename string) ([]byte, error) {
-	logger.Info("User downloading %s...", filename)
-	if _, err := fs.Stat(h.fs, filename); err != nil {
+	if h.dir == "" {
+		return newTextResponse(statusNotFound, ""), fmt.Errorf("directory not specified")
+	}
+
+	fileSystem := os.DirFS(h.dir)
+	if _, err := fs.Stat(fileSystem, filename); err != nil {
 		return newTextResponse(statusNotFound, ""), fmt.Errorf("could not find file: %v", err)
 	}
 
-	b, err := fs.ReadFile(h.fs, filename)
+	logger.Info("User downloading %s...", filename)
+	b, err := fs.ReadFile(fileSystem, filename)
 	if err != nil {
 		return nil, fmt.Errorf("error opening file: %v", err)
 	}
@@ -118,12 +134,22 @@ func (h *Handler) downloadResponse(filename string) ([]byte, error) {
 	)), nil
 }
 
-func (h *Handler) uploadResponse(filename string) ([]byte, error) {
+func (h *Handler) uploadResponse(filename string, data []byte) ([]byte, error) {
+	path := filepath.Join(h.dir, filename)
+	file, err := os.Create(path)
+	if err != nil {
+		return newTextResponse(statusServerError, ""),
+			fmt.Errorf("error creating file %s: %v", path, err)
+	}
+	defer file.Close()
 	logger.Info("User uploading file %s...", filename)
 
-	// GET THE UPLOAD HERE...
+	if _, err = file.Write(data); err != nil {
+		return newTextResponse(statusServerError, ""),
+			fmt.Errorf("error writing file %s: %v", path, err)
+	}
 
-	return nil, nil
+	return newTextResponse(statusCreated, ""), nil
 }
 
 func newTextResponse(status, body string) []byte {

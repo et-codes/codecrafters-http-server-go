@@ -1,7 +1,6 @@
 package main
 
 import (
-	"io/fs"
 	"os"
 
 	"github.com/codecrafters-io/http-server-starter-go/logging"
@@ -16,13 +15,13 @@ const (
 var logger = logging.New(logging.LevelDebug)
 
 func main() {
-	var fs fs.FS
+	var dir string
 	if len(os.Args) >= 3 && os.Args[1] == directoryFlag {
-		fs = os.DirFS(os.Args[2])
-		logger.Info("Serving directory %s...", fs)
+		dir = os.Args[2]
+		logger.Info("Serving directory %s...", dir)
 	}
 
-	s := NewServer(host, port, fs)
+	s := NewServer(host, port, dir)
 	if err := s.Listen(); err != nil {
 		logger.Fatal("Error starting server: %v", err)
 	}
