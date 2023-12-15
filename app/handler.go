@@ -11,14 +11,18 @@ import (
 
 const (
 	appOctStream      = "application/octet-stream"
+	textPlain         = "text/plain"
 	CRLF              = "\r\n"
-	respOK            = "HTTP/1.1 200 OK\r\n\r\n"
-	respNotFound      = "HTTP/1.1 404 Not Found\r\n\r\n"
 	statusOK          = "HTTP/1.1 200 OK"
 	statusCreated     = "HTTP/1.1 201 Created"
 	statusNotFound    = "HTTP/1.1 404 Not Found"
+	statusMethod      = "HTTP/1.1 405 Method Not Allowed"
 	statusServerError = "HTTP/1.1 500 Internal Server Error"
-	textPlain         = "text/plain"
+	respOK            = statusOK + CRLF + CRLF
+	respCreated       = statusCreated + CRLF + CRLF
+	respNotFound      = statusNotFound + CRLF + CRLF
+	respMethod        = statusMethod + CRLF + CRLF
+	respServerError   = statusServerError + CRLF + CRLF
 )
 
 type Handler struct {
@@ -58,14 +62,11 @@ func (h *Handler) Start() {
 		}
 	}
 
-	// Make sure we can handle the request type.
-	if method != "GET" && method != "POST" {
-		logger.Warning("Unsupported method %s", method)
-	}
-
 	// Generate the response according to the path.
 	var response []byte
 	switch {
+	case method != "GET" && method != "POST":
+		response = []byte(respMethod)
 	case path == "/" && method == "GET":
 		response = []byte(respOK)
 	case path[:6] == "/echo/" && method == "GET":
@@ -109,16 +110,20 @@ func (h *Handler) getRequest() (string, error) {
 	return string(response[:n]), nil
 }
 
+// downloadResponse returns a 200 OK response message with a header and the
+// contents of the specified file in the body, or 404 if the file is not found.
 func (h *Handler) downloadResponse(filename string) ([]byte, error) {
 	if h.dir == "" {
-		return newTextResponse(statusNotFound, ""), fmt.Errorf("directory not specified")
+		return []byte(respNotFound), fmt.Errorf("directory not specified")
 	}
 
+	// Open directory.
 	fileSystem := os.DirFS(h.dir)
 	if _, err := fs.Stat(fileSystem, filename); err != nil {
-		return newTextResponse(statusNotFound, ""), fmt.Errorf("could not find file: %v", err)
+		return []byte(respNotFound), fmt.Errorf("could not find file: %v", err)
 	}
 
+	// Read the file.
 	logger.Info("User downloading %s...", filename)
 	b, err := fs.ReadFile(fileSystem, filename)
 	if err != nil {
@@ -134,24 +139,29 @@ func (h *Handler) downloadResponse(filename string) ([]byte, error) {
 	)), nil
 }
 
+// uploadResponse receives a file from the client and saves it, returning
+// a 201 Created response if successful, 500 if not.
 func (h *Handler) uploadResponse(filename string, data []byte) ([]byte, error) {
+	// Create the file.
 	path := filepath.Join(h.dir, filename)
 	file, err := os.Create(path)
 	if err != nil {
-		return newTextResponse(statusServerError, ""),
+		return []byte(respServerError),
 			fmt.Errorf("error creating file %s: %v", path, err)
 	}
 	defer file.Close()
-	logger.Info("User uploading file %s...", filename)
 
+	// Write to the file.
+	logger.Info("User uploading file %s...", filename)
 	if _, err = file.Write(data); err != nil {
-		return newTextResponse(statusServerError, ""),
+		return []byte(respServerError),
 			fmt.Errorf("error writing file %s: %v", path, err)
 	}
 
-	return newTextResponse(statusCreated, ""), nil
+	return []byte(respCreated), nil
 }
 
+// newTestResponse returns an HTTP response with a text body.
 func newTextResponse(status, body string) []byte {
 	return []byte(fmt.Sprintf(
 		"%s\r\n%s: %s\r\n%s: %d\r\n\r\n%s",
@@ -162,6 +172,7 @@ func newTextResponse(status, body string) []byte {
 	))
 }
 
+// parseUserAgent extracts the User-Agent value from the headers.
 func parseUserAgent(lines []string) string {
 	for _, line := range lines {
 		if strings.HasPrefix(line, "User-Agent: ") {
