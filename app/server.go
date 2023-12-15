@@ -22,14 +22,14 @@ func (s *Server) Listen() error {
 	}
 	logger.Info("Listening on port %s", port)
 
-	conn, err := l.Accept()
-	if err != nil {
-		logger.Error("Error accepting connection: ", err.Error())
-		return err
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			logger.Error("Error accepting connection: ", err.Error())
+			return err
+		}
+
+		handler := NewHandler(conn)
+		go handler.Start()
 	}
-
-	handler := NewHandler(conn)
-	handler.Start()
-
-	return nil
 }
