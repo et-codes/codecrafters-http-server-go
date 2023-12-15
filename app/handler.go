@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
-	"os"
 	"strings"
 )
 
@@ -64,7 +63,7 @@ func (h *Handler) Start() {
 		response = newResponse(statusOK, textPlain, message)
 	case path[:7] == "/files/":
 		filename := path[7:]
-		response, err = h.downloadFile(filename)
+		response, err = h.downloadResponse(filename)
 		if err != nil {
 			logger.Error(err.Error())
 		}
@@ -90,8 +89,9 @@ func (h *Handler) getRequest() (string, error) {
 	return string(response), nil
 }
 
-func (h *Handler) downloadFile(filename string) ([]byte, error) {
-	if _, err := os.Stat(filename); err != nil {
+func (h *Handler) downloadResponse(filename string) ([]byte, error) {
+	logger.Debug("Opening file %v%s", h.fs, filename)
+	if _, err := fs.Stat(h.fs, filename); err != nil {
 		return newResponse(statusNotFound, textPlain, ""), fmt.Errorf("could not find file: %v", err)
 	}
 
@@ -100,7 +100,13 @@ func (h *Handler) downloadFile(filename string) ([]byte, error) {
 		return nil, fmt.Errorf("error opening file: %v", err)
 	}
 
-	return newFileResponse(b), nil
+	return []byte(fmt.Sprintf(
+		"%s\r\n%s: %s\r\n%s: %d\r\n\r\n%s",
+		statusOK,
+		"Content-Type", appOctStream,
+		"Content-Length", len(b),
+		b,
+	)), nil
 }
 
 func newResponse(status, contentType, body string) []byte {
@@ -108,16 +114,6 @@ func newResponse(status, contentType, body string) []byte {
 		"%s\r\n%s: %s\r\n%s: %d\r\n\r\n%s",
 		status,
 		"Content-Type", contentType,
-		"Content-Length", len(body),
-		body,
-	))
-}
-
-func newFileResponse(body []byte) []byte {
-	return []byte(fmt.Sprintf(
-		"%s\r\n%s: %s\r\n%s: %d\r\n\r\n%s",
-		statusOK,
-		"Content-Type", appOctStream,
 		"Content-Length", len(body),
 		body,
 	))
